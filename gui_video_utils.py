@@ -13,6 +13,20 @@ VIDEO_TYPES = [
     ("All files", "*.*"),
 ]
 
+AUDIO_TYPES = [
+    ("Audio files", "*.mp3 *.wav *.flac *.m4a *.ogg *.wma"),
+    ("All files", "*.*"),
+]
+
+# Combined list for the Audio Extractor tab
+MEDIA_TYPES = [
+    ("Media files", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v *.mp3 *.wav *.flac *.m4a *.ogg"),
+    ("Video files", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v"),
+    ("Audio files", "*.mp3 *.wav *.flac *.m4a *.ogg"),
+    ("All files", "*.*"),
+]
+
+
 # --- PyInstaller resource resolution ---
 def resource_path(rel):
     return os.path.join(getattr(sys, "_MEIPASS", os.path.abspath(".")), rel)
@@ -54,9 +68,121 @@ def run_logged(cmd, log_write, cwd=None):
     return rc
 
 
-# =========================
-# Extractor tab (existing)
-# =========================
+class AudioExtractorTab(ttk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.input_path = tk.StringVar()
+        self.output_path = tk.StringVar()
+        self.start_time = tk.StringVar(value="00:01:00")
+        self.end_time = tk.StringVar(value="00:01:30")
+
+        self._build()
+
+    def _build(self):
+        pad = {"padx": 10, "pady": 6}
+
+        # Input Path
+        ttk.Label(self, text="원본 파일 경로 (영상 또는 오디오):").grid(row=0, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.input_path, width=70).grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(self, text="파일 탐색", command=self.browse_input).grid(row=0, column=2, **pad)
+
+        # Output Path
+        ttk.Label(self, text="MP3 저장 경로:").grid(row=1, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.output_path, width=70).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(self, text="저장 경로", command=self.browse_output).grid(row=1, column=2, **pad)
+
+        # Time Controls
+        ttk.Label(self, text="시작 시간 (HH:MM:SS):").grid(row=2, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.start_time, width=20).grid(row=2, column=1, sticky="w", **pad)
+
+        ttk.Label(self, text="종료 시간 (HH:MM:SS):").grid(row=3, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.end_time, width=20).grid(row=3, column=1, sticky="w", **pad)
+
+        # Action Button
+        ttk.Button(self, text="MP3 변환/추출 시작", command=self.run).grid(row=4, column=1, sticky="w", padx=10, pady=10)
+
+        # Log console
+        ttk.Label(self, text="Console:").grid(row=5, column=0, sticky="w", **pad)
+        self.log = ScrolledText(self, width=120, height=17, state="disabled")
+        self.log.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(6, weight=1)
+
+    def log_write(self, text: str):
+        self.log.configure(state="normal")
+        self.log.insert("end", text)
+        self.log.see("end")
+        self.log.configure(state="disabled")
+        self.update_idletasks()
+
+    def browse_input(self):
+        # Uses MEDIA_TYPES to allow video or audio selection
+        path = filedialog.askopenfilename(title="원본 파일 선택", filetypes=MEDIA_TYPES)
+        if path:
+            self.input_path.set(path)
+            # Auto-suggest .mp3 output name
+            if not self.output_path.get().strip():
+                base, _ = os.path.splitext(path)
+                self.output_path.set(f"{base}_extracted.mp3")
+
+    def browse_output(self):
+        path = filedialog.asksaveasfilename(
+            title="MP3 저장 경로",
+            defaultextension=".mp3",
+            filetypes=[("MP4 Audio", "*.mp3"), ("All files", "*.*")],
+        )
+        if path:
+            self.output_path.set(path)
+
+    def run(self):
+        inp = self.input_path.get().strip()
+        out = self.output_path.get().strip()
+        ss = self.start_time.get().strip()
+        to = self.end_time.get().strip()
+
+        if not inp or not os.path.exists(inp):
+            messagebox.showerror("Error", "올바른 원본 파일 경로를 지정하세요.")
+            return
+        if not out:
+            messagebox.showerror("Error", "저장될 MP3 경로를 지정하세요.")
+            return
+
+        # FFmpeg Command Breakdown:
+        # -ss / -to : Trim the time
+        # -vn       : Disable video (crucial if input is a video file)
+        # -acodec libmp3lame : Use the standard MP3 encoder
+        # -q:a 2    : High quality Variable Bitrate (VBR)
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-ss", ss,
+            "-to", to,
+            "-i", inp,
+            "-vn",
+            "-acodec", "libmp3lame",
+            "-q:a", "2",
+            out
+        ]
+
+        self.log_write("\n==============================\n")
+        self.log_write(f"[AUDIO EXTRACTION/TRIM]\n")
+        self.log_write(f"Source: {inp}\n")
+        self.log_write(f"Command: {quote_cmd(cmd)}\n\n")
+
+        try:
+            rc = run_logged(cmd, self.log_write)
+            if rc == 0:
+                self.log_write("\n[OK] MP3 작업 완료.\n")
+                messagebox.showinfo("Done", f"MP3 파일이 생성되었습니다:\n{out}")
+            else:
+                self.log_write(f"\n[ERROR] ffmpeg exit code: {rc}\n")
+                messagebox.showerror("Error", "추출 작업 중 오류가 발생했습니다. 콘솔을 확인하세요.")
+        except Exception as e:
+            self.log_write(f"\n[FATAL ERROR] {str(e)}\n")
+            messagebox.showerror("Error", str(e))
+
+
 class ExtractorTab(ttk.Frame):
     def __init__(self, master, log_font_size=9):
         super().__init__(master)
@@ -192,9 +318,6 @@ class ExtractorTab(ttk.Frame):
             messagebox.showerror("알 수 없는 오류로 영상 추출에 실패하였습니다", str(e))
 
 
-# =========================
-# Merger tab (new)
-# =========================
 class MergerTab(ttk.Frame):
     def __init__(self, master):
         super().__init__(master)
@@ -521,18 +644,20 @@ class App(tk.Tk):
         fixed_font.configure(size=mono_size)
         # --------------------------------------
 
-        self.title("Video Utility")
+        self.title("Audio & Video Utility")
         self.geometry("900x650")
         self.resizable(True, True)
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True)
 
+        self.audio_tab = AudioExtractorTab(nb)
         self.extract_tab = ExtractorTab(nb)
         self.merge_tab = MergerTab(nb)
 
-        nb.add(self.extract_tab, text="추출")
-        nb.add(self.merge_tab, text="병합")
+        nb.add(self.audio_tab, text="MP3 추출")
+        nb.add(self.extract_tab, text="영상 추출")
+        nb.add(self.merge_tab, text="영상 병합")
 
         # Footer
         footer = ttk.Label(self, text="\N{COPYRIGHT SIGN} 2026 리턴1. All rights reserved.", foreground="#444")
@@ -543,4 +668,4 @@ if __name__ == "__main__":
     App().mainloop()
 
 # Build:
-# py -m PyInstaller --noconsole --onefile --name "VideoUtils" --add-data "ffmpeg.exe;." gui_video_utils.py
+# py -m PyInstaller --noconsole --onefile --name "AudioVideoUtils" --add-data "ffmpeg.exe;." gui_video_utils.py
