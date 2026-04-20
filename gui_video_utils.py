@@ -7,6 +7,8 @@ from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from tkinter import ttk
 import tkinter.font as tkfont
+from urllib.parse import urlparse, parse_qs, urlunparse # URL 파싱
+
 
 VIDEO_TYPES = [
     ("Video files", "*.mp4 *.mkv *.mov *.avi *.webm *.m4v"),
@@ -763,12 +765,34 @@ class YoutubeDownloaderTab(ttk.Frame):
         self.update_idletasks()
 
     def run(self):
-        url = self.url.get().strip()
+        raw_url = self.url.get().strip()
         out = self.output_path.get().strip()
         
-        if not url:
+        if not raw_url:
             messagebox.showerror("Error", "YouTube URL을 입력하세요.")
             return
+        
+        # --- URL 정제 로직 추가 ---
+        try:
+            parsed_url = urlparse(raw_url)
+            if 'youtube.com' in parsed_url.netloc:
+                query = parse_qs(parsed_url.query)
+                # 'v' 파라미터(영상 ID)만 추출
+                video_id = query.get('v', [None])[0]
+                if video_id:
+                    # &list= 등 부가 정보를 제외한 깨끗한 URL 재조합
+                    url = f"https://www.youtube.com/watch?v={video_id}"
+                else:
+                    url = raw_url
+            elif 'youtu.be' in parsed_url.netloc:
+                # 단축 URL(youtu.be/ID)의 경우 경로 부분만 유지
+                url = f"https://youtu.be{parsed_url.path}"
+            else:
+                url = raw_url
+        except Exception:
+            url = raw_url
+        # -------------------------
+        
         if not out:
             messagebox.showerror("Error", "저장 경로를 선택하세요.")
             return
