@@ -5,6 +5,7 @@ import tempfile
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from urllib.parse import urlparse, parse_qs
+import threading
 
 # CustomTkinter import
 import customtkinter as ctk
@@ -604,28 +605,34 @@ class YoutubeDownloaderTab(ctk.CTkFrame):
         if path: self.output_path.set(path)
 
     def log_write(self, text: str):
-        try: safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
-        except: safe_text = text
-        self.log.configure(state="normal")
-        start_index = self.log.index("end-1c")
-        self.log.insert("end", text)
-        end_index = self.log.index("end-1c")
+        def update_log():
+            try: safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
+            except: safe_text = text
+            
+            self.log.configure(state="normal")
+            start_index = self.log.index("end-1c")
+            self.log.insert("end", text)
+            end_index = self.log.index("end-1c")
 
-        lower_text = text.lower()
-        if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
-            self.log.tag_add("success", start_index, end_index)
-        elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
-            self.log.tag_add("error", start_index, end_index)
-        elif "[warn]" in lower_text or "warning" in lower_text:
-            self.log.tag_add("warning", start_index, end_index)
-        
-        self.log.see("end")
-        self.log.configure(state="disabled")
-        self.update_idletasks()
+            lower_text = text.lower()
+            if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
+                self.log.tag_add("success", start_index, end_index)
+            elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
+                self.log.tag_add("error", start_index, end_index)
+            elif "[warn]" in lower_text or "warning" in lower_text:
+                self.log.tag_add("warning", start_index, end_index)
+            
+            self.log.see("end")
+            self.log.configure(state="disabled")
+            
+        # 메인 스레드에서 안전하게 UI를 업데이트하도록 예약
+        self.after(0, update_log)
 
     def run(self):
         raw_url = self.url.get().strip()
         out = self.output_path.get().strip()
+        
+        # 1. UI 입력값 검증 (메인 스레드에서 즉시 처리)
         if not raw_url:
             messagebox.showerror("Error", "YouTube URL을 입력하세요.")
             return
@@ -662,17 +669,23 @@ class YoutubeDownloaderTab(ctk.CTkFrame):
         self.log_write(f"\n[DOWNLOAD START]\nURL: {url}\nOutput: {out}\n")
         self.log_write(f"Command: {quote_cmd(cmd)}\n\n")
         
-        try:
-            rc = run_logged(cmd, self.log_write)
-            if rc == 0:
-                self.log_write("\n[OK] Download completed.\n")
-                messagebox.showinfo("Done", "다운로드가 완료되었습니다.")
-            else:
-                self.log_write(f"\n[ERROR] yt-dlp exit code: {rc}\n")
-                messagebox.showerror("Error", f"다운로드 중 오류 발생 (Exit Code: {rc})\n콘솔을 확인하세요.")
-        except Exception as e:
-            self.log_write(f"\n[FATAL ERROR] {str(e)}\n")
-            messagebox.showerror("Error", str(e))
+        # 2. 백그라운드 스레드에서 실행할 작업 정의
+        def download_process():
+            try:
+                rc = run_logged(cmd, self.log_write)
+                if rc == 0:
+                    self.log_write("\n[OK] Download completed.\n")
+                    # UI 조작(messagebox)은 메인 스레드에서 안전하게 실행되도록 self.after 사용
+                    self.after(0, lambda: messagebox.showinfo("Done", "다운로드가 완료되었습니다."))
+                else:
+                    self.log_write(f"\n[ERROR] yt-dlp exit code: {rc}\n")
+                    self.after(0, lambda: messagebox.showerror("Error", f"다운로드 중 오류 발생 (Exit Code: {rc})\n콘솔을 확인하세요."))
+            except Exception as e:
+                self.log_write(f"\n[FATAL ERROR] {str(e)}\n")
+                self.after(0, lambda: messagebox.showerror("Error", str(e)))
+
+        # 3. 스레드 시작 (daemon=True로 설정하면 메인 프로그램 종료 시 스레드도 함께 종료됨)
+        threading.Thread(target=download_process, daemon=True).start()
 
 
 class App(ctk.CTk):
