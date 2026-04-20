@@ -108,12 +108,30 @@ class AudioExtractorTab(ttk.Frame):
         self.log = ScrolledText(self, width=120, height=17, state="disabled")
         self.log.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
+        self.log.tag_configure("success", foreground="green")
+        self.log.tag_configure("error", foreground="red")
+        self.log.tag_configure("warning", foreground="#CC9900") # 약간 어두운 노랑 (가독성용)
+
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(6, weight=1)
 
     def log_write(self, text: str):
         self.log.configure(state="normal")
+        
+        # 현재 마지막 위치 저장
+        start_index = self.log.index("end-1c")
         self.log.insert("end", text)
+        end_index = self.log.index("end-1c")
+
+        # 키워드에 따라 색상 적용
+        lower_text = text.lower()
+        if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
+            self.log.tag_add("success", start_index, end_index)
+        elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
+            self.log.tag_add("error", start_index, end_index)
+        elif "[warn]" in lower_text or "warning" in lower_text:
+            self.log.tag_add("warning", start_index, end_index)
+        
         self.log.see("end")
         self.log.configure(state="disabled")
         self.update_idletasks()
@@ -219,13 +237,31 @@ class ExtractorTab(ttk.Frame):
         self.log = ScrolledText(self, width=120, height=17, state="disabled")
         self.log.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
+        self.log.tag_configure("success", foreground="green")
+        self.log.tag_configure("error", foreground="red")
+        self.log.tag_configure("warning", foreground="#CC9900") # 약간 어두운 노랑 (가독성용)
+
         # Layout weights
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(6, weight=1)
 
     def log_write(self, text: str):
         self.log.configure(state="normal")
+        
+        # 현재 마지막 위치 저장
+        start_index = self.log.index("end-1c")
         self.log.insert("end", text)
+        end_index = self.log.index("end-1c")
+
+        # 키워드에 따라 색상 적용
+        lower_text = text.lower()
+        if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
+            self.log.tag_add("success", start_index, end_index)
+        elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
+            self.log.tag_add("error", start_index, end_index)
+        elif "[warn]" in lower_text or "warning" in lower_text:
+            self.log.tag_add("warning", start_index, end_index)
+        
         self.log.see("end")
         self.log.configure(state="disabled")
         self.update_idletasks()
@@ -371,6 +407,10 @@ class MergerTab(ttk.Frame):
         self.log = ScrolledText(self, width=120, height=15, state="disabled")
         self.log.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
+        self.log.tag_configure("success", foreground="green")
+        self.log.tag_configure("error", foreground="red")
+        self.log.tag_configure("warning", foreground="#CC9900") # 약간 어두운 노랑 (가독성용)
+
         # Layout weights
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -378,7 +418,21 @@ class MergerTab(ttk.Frame):
 
     def log_write(self, text: str):
         self.log.configure(state="normal")
+        
+        # 현재 마지막 위치 저장
+        start_index = self.log.index("end-1c")
         self.log.insert("end", text)
+        end_index = self.log.index("end-1c")
+
+        # 키워드에 따라 색상 적용
+        lower_text = text.lower()
+        if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
+            self.log.tag_add("success", start_index, end_index)
+        elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
+            self.log.tag_add("error", start_index, end_index)
+        elif "[warn]" in lower_text or "warning" in lower_text:
+            self.log.tag_add("warning", start_index, end_index)
+        
         self.log.see("end")
         self.log.configure(state="disabled")
         self.update_idletasks()
@@ -656,6 +710,10 @@ class YoutubeDownloaderTab(ttk.Frame):
         self.log = ScrolledText(self, width=120, height=20, state="disabled") # 높이를 조금 늘림
         self.log.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
+        self.log.tag_configure("success", foreground="green")
+        self.log.tag_configure("error", foreground="red")
+        self.log.tag_configure("warning", foreground="#CC9900") # 약간 어두운 노랑 (가독성용)
+
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(5, weight=1)
 
@@ -685,7 +743,21 @@ class YoutubeDownloaderTab(ttk.Frame):
 
     def log_write(self, text: str):
         self.log.configure(state="normal")
+        
+        # 현재 마지막 위치 저장
+        start_index = self.log.index("end-1c")
         self.log.insert("end", text)
+        end_index = self.log.index("end-1c")
+
+        # 키워드에 따라 색상 적용
+        lower_text = text.lower()
+        if "[ok]" in lower_text or "완료" in lower_text or "success" in lower_text:
+            self.log.tag_add("success", start_index, end_index)
+        elif "[error]" in lower_text or "fail" in lower_text or "오류" in lower_text:
+            self.log.tag_add("error", start_index, end_index)
+        elif "[warn]" in lower_text or "warning" in lower_text:
+            self.log.tag_add("warning", start_index, end_index)
+        
         self.log.see("end")
         self.log.configure(state="disabled")
         self.update_idletasks()
