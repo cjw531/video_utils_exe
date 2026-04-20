@@ -55,18 +55,28 @@ def quote_cmd(cmd):
 def run_logged(cmd, log_write, cwd=None):
     """Run a command and stream stdout/stderr to the provided logger."""
     log_write(f"> {quote_cmd(cmd)}\n")
+    
+    # Windows에서 한글 깨짐 방지를 위한 환경 변수 설정
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-        encoding="utf-8",
-        errors="replace",
+        encoding="utf-8",    # FFmpeg/yt-dlp의 UTF-8 출력을 받음1
+        errors="replace",    # 알 수 없는 문자는 대체 문자로 처리
+        env=env,
+        # Windows에서 실행 시 검은색 CMD 창이 튀어나오는 것을 방지
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0 
     )
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        log_write(line)
+    
+    if proc.stdout:
+        for line in proc.stdout:
+            log_write(line)
+            
     rc = proc.wait()
     return rc
 
@@ -107,7 +117,7 @@ class AudioExtractorTab(ttk.Frame):
 
         # Log console
         ttk.Label(self, text="Console:").grid(row=5, column=0, sticky="w", **pad)
-        self.log = ScrolledText(self, width=120, height=17, state="disabled")
+        self.log = ScrolledText(self, width=120, height=17, state="disabled", font=("Malgun Gothic", 10))
         self.log.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
         self.log.tag_configure("success", foreground="green")
@@ -118,6 +128,13 @@ class AudioExtractorTab(ttk.Frame):
         self.grid_rowconfigure(6, weight=1)
 
     def log_write(self, text: str):
+        # 때때로 들어오는 데이터가 인코딩이 꼬였을 경우를 대비
+        try:
+            # 이미 str 타입이지만, 혹시 모를 내부 깨짐 방지
+            safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
+        except:
+            safe_text = text
+
         self.log.configure(state="normal")
         
         # 현재 마지막 위치 저장
@@ -236,7 +253,7 @@ class ExtractorTab(ttk.Frame):
 
         # Log console
         ttk.Label(self, text="Console:").grid(row=5, column=0, sticky="w", **pad)
-        self.log = ScrolledText(self, width=120, height=17, state="disabled")
+        self.log = ScrolledText(self, width=120, height=17, state="disabled", font=("Malgun Gothic", 10))
         self.log.grid(row=6, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
         self.log.tag_configure("success", foreground="green")
@@ -248,6 +265,13 @@ class ExtractorTab(ttk.Frame):
         self.grid_rowconfigure(6, weight=1)
 
     def log_write(self, text: str):
+        # 때때로 들어오는 데이터가 인코딩이 꼬였을 경우를 대비
+        try:
+            # 이미 str 타입이지만, 혹시 모를 내부 깨짐 방지
+            safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
+        except:
+            safe_text = text
+
         self.log.configure(state="normal")
         
         # 현재 마지막 위치 저장
@@ -406,7 +430,7 @@ class MergerTab(ttk.Frame):
 
         # Log console
         ttk.Label(self, text="Console:").grid(row=4, column=0, sticky="w", **pad)
-        self.log = ScrolledText(self, width=120, height=15, state="disabled")
+        self.log = ScrolledText(self, width=120, height=15, state="disabled", font=("Malgun Gothic", 10))
         self.log.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
         self.log.tag_configure("success", foreground="green")
@@ -419,6 +443,13 @@ class MergerTab(ttk.Frame):
         self.grid_rowconfigure(5, weight=1)
 
     def log_write(self, text: str):
+        # 때때로 들어오는 데이터가 인코딩이 꼬였을 경우를 대비
+        try:
+            # 이미 str 타입이지만, 혹시 모를 내부 깨짐 방지
+            safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
+        except:
+            safe_text = text
+
         self.log.configure(state="normal")
         
         # 현재 마지막 위치 저장
@@ -709,7 +740,7 @@ class YoutubeDownloaderTab(ttk.Frame):
 
         # Log console
         ttk.Label(self, text="Console:").grid(row=4, column=0, sticky="w", **pad)
-        self.log = ScrolledText(self, width=120, height=20, state="disabled") # 높이를 조금 늘림
+        self.log = ScrolledText(self, width=120, height=20, state="disabled", font=("Malgun Gothic", 10))
         self.log.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
         self.log.tag_configure("success", foreground="green")
@@ -744,6 +775,13 @@ class YoutubeDownloaderTab(ttk.Frame):
             self.output_path.set(path)
 
     def log_write(self, text: str):
+        # 때때로 들어오는 데이터가 인코딩이 꼬였을 경우를 대비
+        try:
+            # 이미 str 타입이지만, 혹시 모를 내부 깨짐 방지
+            safe_text = text.encode('utf-8', errors='ignore').decode('utf-8')
+        except:
+            safe_text = text
+
         self.log.configure(state="normal")
         
         # 현재 마지막 위치 저장
@@ -837,23 +875,20 @@ class App(tk.Tk):
         super().__init__()
 
         # ----- Increase font size globally -----
+        base_font_family = "Malgun Gothic"
         base_size = 10
         mono_size = 10
 
-        default_font = tkfont.nametofont("TkDefaultFont")
-        text_font = tkfont.nametofont("TkTextFont")
-        fixed_font = tkfont.nametofont("TkFixedFont")
-        menu_font = tkfont.nametofont("TkMenuFont")
-        heading_font = tkfont.nametofont("TkHeadingFont")
-        caption_font = tkfont.nametofont("TkCaptionFont")
-        small_caption_font = tkfont.nametofont("TkSmallCaptionFont")
-        icon_font = tkfont.nametofont("TkIconFont")
-        tooltip_font = tkfont.nametofont("TkTooltipFont")
+        font_names = (
+            "TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont",
+            "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont"
+        )
 
-        for f in (default_font, text_font, menu_font, heading_font,
-                  caption_font, small_caption_font, icon_font, tooltip_font):
-            f.configure(size=base_size)
-        fixed_font.configure(size=mono_size)
+        for name in font_names:
+            tkfont.nametofont(name).configure(family=base_font_family, size=base_size)
+            
+        # 고정폭 폰트(콘솔용) 설정
+        tkfont.nametofont("TkFixedFont").configure(family=base_font_family, size=mono_size)
         # --------------------------------------
 
         self.title("Audio & Video Utility")
