@@ -32,9 +32,10 @@ def resource_path(rel):
     return os.path.join(getattr(sys, "_MEIPASS", os.path.abspath(".")), rel)
 
 ffmpeg_bin = resource_path("ffmpeg.exe")
-if not os.path.exists(ffmpeg_bin):
-    ffmpeg_bin = "ffmpeg"  # fallback to PATH
-# -------------------------------------
+ytdlp_bin = resource_path("yt-dlp.exe") # Added yt-dlp binary reference
+
+if not os.path.exists(ffmpeg_bin): ffmpeg_bin = "ffmpeg"
+if not os.path.exists(ytdlp_bin): ytdlp_bin = "yt-dlp"
 
 
 def quote_cmd(cmd):
@@ -617,6 +618,121 @@ class MergerTab(ttk.Frame):
                 pass
 
 
+class YoutubeDownloaderTab(ttk.Frame):
+    def __init__(self, master):
+        super().__init__(master)
+        self.url = tk.StringVar()
+        self.output_path = tk.StringVar()
+        # 다운로드 타입 기본값 mp4
+        self.download_type = tk.StringVar(value="mp4") 
+        # 타입 변경 시 확장자 자동 업데이트를 위한 추적(trace) 설정
+        self.download_type.trace_add("write", self._update_extension)
+
+        self._build()
+
+    def _build(self):
+        pad = {"padx": 10, "pady": 6}
+
+        # URL Input
+        ttk.Label(self, text="YouTube URL:").grid(row=0, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.url, width=70).grid(row=0, column=1, sticky="we", **pad)
+
+        # Output Path
+        ttk.Label(self, text="저장 경로:").grid(row=1, column=0, sticky="w", **pad)
+        ttk.Entry(self, textvariable=self.output_path, width=70).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(self, text="경로 선택", command=self.browse_output).grid(row=1, column=2, **pad)
+
+        # Download Options (Type)
+        opts_frame = ttk.LabelFrame(self, text="다운로드 옵션")
+        opts_frame.grid(row=2, column=1, sticky="w", **pad)
+        ttk.Radiobutton(opts_frame, text="Video (MP4 1080p)", variable=self.download_type, value="mp4").pack(side="left", padx=5)
+        ttk.Radiobutton(opts_frame, text="Audio (MP3)", variable=self.download_type, value="mp3").pack(side="left", padx=5)
+
+        # Action Button
+        ttk.Button(self, text="다운로드 시작", command=self.run).grid(row=3, column=1, sticky="w", padx=10, pady=10)
+
+        # Log console
+        ttk.Label(self, text="Console:").grid(row=4, column=0, sticky="w", **pad)
+        self.log = ScrolledText(self, width=120, height=20, state="disabled") # 높이를 조금 늘림
+        self.log.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(5, weight=1)
+
+    def _update_extension(self, *args):
+        """다운로드 옵션이 바뀔 때 기존 경로의 확장자를 교체함"""
+        current_path = self.output_path.get().strip()
+        if not current_path:
+            return
+
+        new_ext = ".mp4" if self.download_type.get() == "mp4" else ".mp3"
+        base, _ = os.path.splitext(current_path)
+        
+        # .mp4.mp3 중복 방지를 위해 확장자를 새로 붙임
+        self.output_path.set(base + new_ext)
+
+    def browse_output(self):
+        ext = ".mp4" if self.download_type.get() == "mp4" else ".mp3"
+        ftypes = [("Video", "*.mp4")] if self.download_type.get() == "mp4" else [("Audio", "*.mp3")]
+        
+        path = filedialog.asksaveasfilename(
+            title="저장 경로 선택", 
+            defaultextension=ext,
+            filetypes=ftypes + [("All files", "*.*")]
+        )
+        if path: 
+            self.output_path.set(path)
+
+    def log_write(self, text: str):
+        self.log.configure(state="normal")
+        self.log.insert("end", text)
+        self.log.see("end")
+        self.log.configure(state="disabled")
+        self.update_idletasks()
+
+    def run(self):
+        url = self.url.get().strip()
+        out = self.output_path.get().strip()
+        
+        if not url:
+            messagebox.showerror("Error", "YouTube URL을 입력하세요.")
+            return
+        if not out:
+            messagebox.showerror("Error", "저장 경로를 선택하세요.")
+            return
+
+        # yt-dlp 명령어 구성
+        cmd = [ytdlp_bin, "--ffmpeg-location", ffmpeg_bin]
+        
+        if self.download_type.get() == "mp3":
+            cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+        else:
+            # H.264/AAC MP4 우선순위 설정
+            cmd += [
+                "-f", "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[height<=1080][ext=mp4]/best",
+                "--merge-output-format", "mp4",
+                "--format-sort", "vcodec:h264,res:1080,acodec:m4a"
+            ]
+
+        # 구간 설정 코드 삭제됨 (전체 다운로드)
+        cmd += ["-o", out, url]
+
+        self.log_write(f"\n[DOWNLOAD START]\nURL: {url}\nOutput: {out}\n")
+        self.log_write(f"Command: {quote_cmd(cmd)}\n\n")
+        
+        try:
+            rc = run_logged(cmd, self.log_write)
+            if rc == 0:
+                self.log_write("\n[OK] Download completed.\n")
+                messagebox.showinfo("Done", "다운로드가 완료되었습니다.")
+            else:
+                self.log_write(f"\n[ERROR] yt-dlp exit code: {rc}\n")
+                messagebox.showerror("Error", f"다운로드 중 오류 발생 (Exit Code: {rc})\n콘솔을 확인하세요.")
+        except Exception as e:
+            self.log_write(f"\n[FATAL ERROR] {str(e)}\n")
+            messagebox.showerror("Error", str(e))
+
+
 # =========================
 # Main app (tabs)
 # =========================
@@ -654,10 +770,12 @@ class App(tk.Tk):
         self.audio_tab = AudioExtractorTab(nb)
         self.extract_tab = ExtractorTab(nb)
         self.merge_tab = MergerTab(nb)
+        self.yt_tab = YoutubeDownloaderTab(nb)
 
         nb.add(self.audio_tab, text="MP3 추출")
         nb.add(self.extract_tab, text="영상 추출")
         nb.add(self.merge_tab, text="영상 병합")
+        nb.add(self.yt_tab, text="YouTube 다운로드")
 
         # Footer
         footer = ttk.Label(self, text="\N{COPYRIGHT SIGN} 2026 리턴1. All rights reserved.", foreground="#444")
@@ -669,3 +787,4 @@ if __name__ == "__main__":
 
 # Build:
 # py -m PyInstaller --noconsole --onefile --name "AudioVideoUtils" --add-data "ffmpeg.exe;." gui_video_utils.py
+# py -m PyInstaller --noconsole --onefile --name "AudioVideoUtils_v3.0.0" --add-data "ffmpeg.exe;." --add-data "yt-dlp.exe;." gui_video_utils.py
