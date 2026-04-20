@@ -11,3 +11,8 @@ Download YouTube videos in full.
 ```
 pip install pyinstaller
 ```
+
+2. CustomTkinter (UI)
+```
+pip install customtkinter
+```
